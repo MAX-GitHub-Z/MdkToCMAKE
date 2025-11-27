@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import os
-import platform
-import datetime
 from pathlib import Path
-import json
-
+import shutil
 
 def safe_create_file_structure(base_dir, folder_name, file_name,file_cover = False, content="",indent=0):
     """
@@ -64,7 +61,37 @@ def safe_create_file_structure(base_dir, folder_name, file_name,file_cover = Fal
             print("✗ 文件创建失败")
             return False
             
-
+def copy_file_with_custom_name(source_file, target_file):
+    """
+    跨平台复制文件到指定路径（可自定义文件名）
+    不存在则创建目录，存在则覆盖文件
+    
+    Args:
+        source_file: 源文件路径
+        target_file: 目标文件路径（可包含自定义文件名）
+    """
+    try:
+        # 转换为 Path 对象（自动处理不同操作系统的路径分隔符）
+        source = Path(source_file)
+        target = Path(target_file)
+        
+        # 检查源文件是否存在
+        if not source.exists():
+            raise FileNotFoundError(f"源文件不存在: {source}")
+        
+        # 确保目标目录存在
+        target.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 复制文件（自动覆盖已存在的文件）
+        shutil.copy2(source, target)
+        
+        print(f"✅ 文件复制成功: {source} -> {target}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 文件复制失败: {e}")
+        return False
+    
 
 def process_relative_path(relative_path):
     """
@@ -119,7 +146,9 @@ class CMake (object):
         cmake_file = self.path
         cmake_file_name = self.project['name'].text + ".cmake"
         safe_create_file_structure(cmake_file, "cmake", cmake_file_name)
-
+        #此处应该读取 手动配置的 CMAKE编译选项
+        self.Cmake['CMAKE_C_FLAGS_MANUAL']= ''
+        self.Cmake['CMAKE_LINKER_FILE'] = ''
 
     def populateCMake (self):
         """ Generate CMakeList.txt file for building the project
@@ -129,17 +158,34 @@ class CMake (object):
         cmake = {}
         #fpu = '-mfpu=fpv5-sp-d16 -mfloat-abi=softfp'
         fpu = ''
-        core = ""
-        core = "-mcpu="+self.project['AdsCpuType'].lower()
+        core =  self.project['AdsCpuType'].strip('"\'')
+        core = '-mcpu='+core.lower()
         print("当前生成项目使用的 处理器内核为："+core)
 
-        cmake['version'] = 'cmake_minimum_required(VERSION 3.1)'
+        cmake['version'] = 'cmake_minimum_required(VERSION 3.12)'
         cmake['language'] =  '# Enable CMake support for ASM and C languages \n enable_language(C ASM)'
-        cmake['project'] = '# Set the project name \n set(CMAKE_PROJECT_NAME '+self.project['name'] +')'
-
-
-
-
+        cmake['project'] = '# Set the project name \n set(CMAKE_PROJECT_NAME '+self.project['name'] +')\n'
+        #加载编译器 arm
+        cmake['COMPILER'] = '\n# arm-none-eabi- must be part of path environment\n set(TOOLCHAIN_PREFIX   arm-none-eabi-)\n '
+        cmake['COMPILER'] = cmake['COMPILER'] +'set(CMAKE_C_COMPILER    ${TOOLCHAIN_PREFIX}gcc)\n set(CMAKE_ASM_COMPILER ${CMAKE_C_COMPILER})\n set(CMAKE_CXX_COMPILER  ${TOOLCHAIN_PREFIX}g++) ' 
+        cmake['COMPILER'] = cmake['COMPILER'] +'set(CMAKE_LINKER    ${TOOLCHAIN_PREFIX}g++)\n set(CMAKE_OBJCOPY ${TOOLCHAIN_PREFIX}objcopy)\n set(CMAKE_SIZE    ${TOOLCHAIN_PREFIX}size)\n'
+        #配置内核型号
+        cmake['CpuType'] =' # MCU specific flags\n set(TARGET_FLAGS "' + core +'")\n'
+        #配置手动添加的编译选项
+        cmake['CMAKE_C_FLAGS_MANUAL'] = '# This time, new compilation options have been added.\n #此处应该读取 手动配置的 CMAKE编译选项\n set(CMAKE_C_FLAGS_MANUAL '+self.Cmake['CMAKE_C_FLAGS_MANUAL']+')'
+        #手动配置对应的链接文件 末尾以 .ld结尾 STM32的可以使用CudeMX生成，添加文件路径格式 应该类似与 下面的 inc与src
+        cmake['CMAKE_LINKER_FILE'] = '#手动配置对应的链接文件 末尾以 .ld结尾 STM32的可以使用CudeMX生成,添加文件路径格式 应该类似与 下面的 inc与src\n set(CMAKE_LINKER_FILE '+self.Cmake['CMAKE_LINKER_FILE']+')'
+        #配置配置通用的编译选项 等
+        cmake['CMAKE_C_FLAGS'] = '\n\n# 此处是通用的编译选项C语言 自动生成\n set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TARGET_FLAGS} ${CMAKE_C_FLAGS_MANUAL} -mthumb' \
+        ' -Wall -fdata-sections -ffunction-sections -std=c99 -fno-rtti")'
+        cmake['CMAKE_ASM_FLAGS'] = '# 此处是通用的编译选项汇编语言 自动生成\n set(CMAKE_ASM_FLAGS "${TARGET_FLAGS} -x -mthumb assembler-with-cpp -MMD -MP")'
+        cmake['CMAKE_CXX_FLAGS']='# 此处是通用的编译选项CXX语言 自动生成\n set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -Wall -fdata-sections -ffunction-sections")\n\n'
+        #配置宏定义
+        cmake['defines'] = '#此处是项目使用的宏定义 自动生成\nadd_compile_definitions( \n'
+        for define in self.project['defs']:
+            cmake['defines']=cmake['defines']+'  '+define+'\n'
+        cmake['defines']=cmake['defines'] + ')\n'
+        #配置连接文件
 
 
         cmake['incs'] = '#generated include paths \n set(Inc_Pro \n'
@@ -147,43 +193,19 @@ class CMake (object):
             inc_file = process_relative_path(inc)
             cmake['incs'] = cmake['incs'] + '   ${CMAKE_CURRENT_SOURCE_DIR}'+ inc_file + '\n'
             #cmake['incs'].append(inc_file)    
-            print(inc_file)
+            #print(inc_file)
         cmake['incs'] = cmake['incs'] +  ')' + '\n'
-        cmake['srcs'] = '#generated include paths \n set(SRC_Pro \n'
+        cmake['srcs'] = '#generated src paths \n set(SRC_Pro \n'
 
 
-        cmake['files']=[]
-        cmake['ass']=[]
-        
+
         for file in self.project['srcs']:
             src_file = process_relative_path(file)
             #print(src_file)
             if src_file.endswith('.c') or src_file.endswith('.h') or src_file.endswith('.cpp'):
                 cmake['srcs'] = cmake['srcs'] + '   ${CMAKE_CURRENT_SOURCE_DIR}'+src_file+'\n'
                 #cmake['files'].append({'path': src_file,'var':'SRC_FILE' + str(i)})  
-
-            
-		
-        cmake['cxx'] = 'false'
-        
-        cmake['c_flags'] = '-g -Wextra -Wshadow -Wimplicit-function-declaration -Wredundant-decls -Wmissing-prototypes -Wstrict-prototypes -fno-common -ffunction-sections -fdata-sections -MD -Wall -Wundef -mthumb ' + core + ' ' + fpu
-
-        cmake['cxx_flags'] = '-Wextra -Wshadow -Wredundant-decls  -Weffc++ -fno-common -ffunction-sections -fdata-sections -MD -Wall -Wundef -mthumb ' + core + ' ' + fpu
- 
-        cmake['asm_flags'] = '-g -mthumb ' + core + ' ' + fpu #+ ' -x assembler-with-cpp'
-        cmake['linker_flags'] = '-g -Wl,--gc-sections -Wl,-Map=' + cmake['project'] + '.map -mthumb ' + core + ' ' + fpu
-        cmake['linker_script'] = 'STM32FLASH.ld'
-        cmake['linker_path'] = ''  
-   
-        #self.linkerScript('STM32FLASH.ld',os.path.join(self.path,'STM32FLASH.ld'))
-        
-        cmake['oocd_target'] = 'stm32f3x'
-        cmake['defines'] = []
-        for define in self.project['defs']:
-            cmake['defines'].append(define)
-            
-        cmake['libs'] = []
-        
+        cmake['srcs'] = cmake['srcs'] +')\n'
         self.context['cmake'] = cmake
         
         abspath = os.path.abspath(os.path.join(self.path,'CMakeLists.txt'))
@@ -206,33 +228,18 @@ class CMake (object):
 
 
     
-    def linkerScript(self,pathSrc, pathDst='',template_dir='.'):
-#    def linkerScript(self,pathSrc, pathDst='',template_dir='.../PegasusTemplates'):
-                
-        if (pathDst == ''):
-            pathDst = pathSrc
-            
-        self.context['file'] = os.path.basename(str(pathSrc))
-        self.context['flash'] = '64'
-        self.context['ram'] = '8'        
-        
-        env = Environment(loader=FileSystemLoader(template_dir),trim_blocks=True,lstrip_blocks=True)
-        template = env.get_template(str(pathSrc))
-        
-        generated_code = template.render(self.context)
-            
-        if platform.system() == 'Windows':    
+    def CmakeCopyList(self):
+        source_path = os.getcwd()
+        source_path = Path(source_path)
+        source_file = Path(source_path/"ProjectToCMAKE"/"cmake.cmake")
+        parent_dir = Path(__file__).parent.parent.absolute()
 
-            with open(pathDst, 'w') as f:
-                f.write(generated_code)
-        
-        elif platform.system() == 'Linux':
+        target_file = parent_dir/"CMakeLists.txt"
 
-            with open(pathDst, 'w') as f:
-                f.write(generated_code)        
-        else:
-            # Different OS than Windows or Linux            
-            pass
+        source_file = Path(source_file)
+        target_file = Path(target_file)
+        copy_file_with_custom_name(source_file,target_file)
+        return
         
     def context_to_text(self):
         """
@@ -255,3 +262,30 @@ class CMake (object):
         process_dict(self.context['cmake'])
         #print(lines)
         return '\n'.join(lines)
+    
+    def copy_file_with_custom_name(source_file, target_file):
+        """
+    跨平台复制文件到指定路径（可自定义文件名）
+    不存在则创建目录，存在则覆盖文件
+    
+    Args:
+        source_file: 源文件路径
+        target_file: 目标文件路径（可包含自定义文件名）
+        """
+        # 转换为 Path 对象（自动处理不同操作系统的路径分隔符）
+        source = Path(source_file)
+        target = Path(target_file)
+        
+        # 检查源文件是否存在
+        if not source.exists():
+            print("源文件不存在: {source}")
+        
+        # 确保目标目录存在
+        target.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 复制文件（自动覆盖已存在的文件）
+        shutil.copy2(source, target)
+        
+        print("✅ 文件复制成功: {source} -> {target}")
+        return True
+        

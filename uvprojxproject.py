@@ -38,15 +38,15 @@ class UVPROJXProject(object):
         self.project['incs'] = self.root.Targets.Target.TargetOption.TargetArmAds.Cads.VariousControls.IncludePath.text.split(';')
         self.project['mems'] = self.root.Targets.Target.TargetOption.TargetCommonOption.Cpu
         self.project['defs'] = self.root.Targets.Target.TargetOption.TargetArmAds.Cads.VariousControls.Define.text.split(',')
-        print(self.project['FlashUtilSpec'])
-        print(self.project['AdsCpuType'],self.project['defs'] )
-        print(self.project['incs'])
+        #print(self.project['FlashUtilSpec'])
+        #print(self.project['AdsCpuType'],self.project['defs'] )
+        #print(self.project['incs'])
         self.project['srcs'] = []
 
         #print(self.project['name'],self.project['chip'],self.project['Vendor'],self.project['FlashUtilSpec'])
 
         for element in self.root.Targets.Target.Groups.getchildren():
-            print('GroupName: ' + element.GroupName.text)
+            #print('GroupName: ' + element.GroupName.text)
             if hasattr(element, 'Files'):
                 for file in element.Files.getchildren():
                     if not str(file.FilePath.text).endswith('.s'):
@@ -59,7 +59,7 @@ class UVPROJXProject(object):
         for i in range(0, len(self.project['incs'])):
             s = str(self.project['incs'][i])
             src_file=Path(s)
-            print(src_file)
+            #print(src_file)
             self.project['incs'][i] = src_file
 
         self.project['files'] = []
