@@ -48,7 +48,7 @@ def copy_file_with_custom_name(source_file, target_file):
         if not source.exists():
             raise FileNotFoundError(f"源文件不存在: {source}")
 
-
+        
         # 确保目标目录存在
         target.parent.mkdir(parents=True, exist_ok=True)
         
@@ -114,17 +114,21 @@ if __name__ == '__main__':
     cmake_path = parent_dir/"cmake"
     cmake_path = Path(cmake_path)
     cmake_rule_path =  Path(cmake_path/'Rule.cmake')
+    if cmake_rule_path.exists():
+        os.remove(cmake_rule_path)
+
     cmake_dir = get_files_by_extensions(cmake_path, ['.cmake'])
     cmake_lenth = len(cmake_dir)
     print(cmake_dir,cmake_lenth)
     for cmake_file in cmake_dir:
-        if are_paths_identical(cmake_file,cmake_rule_path):
-            cmake_lenth =cmake_lenth-1            
         if cmake_lenth == 1:
             print("该项目只有一个工程 自动复制该编译配置 并进行编译")
             print(cmake_rule_path)
             copy_file_with_custom_name(cmake_file, cmake_rule_path)
-    CmakeFile.CmakeCopyList()
+            projectName = Path(cmake_file).stem
+            
+
+    CmakeFile.CmakeCopyList(projectName)
 
     
 
