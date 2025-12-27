@@ -25,6 +25,7 @@ endif()
  # Set the project name 
 set(CMAKE_PROJECT_NAME CMAKE)
 
+
 project(${CMAKE_PROJECT_NAME} )
 
 #set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
@@ -34,6 +35,7 @@ project(${CMAKE_PROJECT_NAME} )
 #需要编译的.c文件
 SET(SRC_LIST
     ${SRC_Pro}   
+    ${SRC_STARTIP}
 )
 
 #编译时的头文件
@@ -42,6 +44,25 @@ include_directories(${Inc_Pro})
 set(OUTPUT_PAHT ${OutPut_Path})
 set(EXECUTABLE_OUTPUT_PATH ${OUTPUT_PAHT})
 set(CMAKE_EXE_LINKER_FLAGS ${LINKER_FLAGS})
-add_executable(${CMAKE_PROJECT_NAME} ${SRC_LIST})
+
+add_executable(${CMAKE_PROJECT_NAME}.elf ${SRC_LIST})
 #强制输出的成果物为 .elf
-set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".elf")
+#set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".elf")
+
+set(CMAKE_STRIP "strip")
+#设置转换后的路径
+set(ELF_FILE ${OUTPUT_PAHT}/${PROJECT_NAME}.elf)
+set(HEX_FILE ${OUTPUT_PAHT}/${PROJECT_NAME}.hex)
+set(BIN_FILE ${OUTPUT_PAHT}/${PROJECT_NAME}.bin)
+
+
+add_custom_command( TARGET "${PROJECT_NAME}.elf" POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -Oihex ${ELF_FILE} ${HEX_FILE}
+    COMMAND ${CMAKE_OBJCOPY} -Obinary ${ELF_FILE} ${BIN_FILE}
+    COMMAND echo "Generating HEX and BIN files from ELF "
+    COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_MAP_ELIF}
+                ${BUILD_MAP_FILE}
+    COMMENT "Copying file to destination directory"
+)
+

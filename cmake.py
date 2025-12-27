@@ -271,9 +271,10 @@ class CMake (object):
         #手动配置gcc编译时的路径
 
         cmake['CMAKE_COMPILER_PATH'] = ' if(CMAKE_C_COMPILER)\n   message(STATUS "CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")\n    get_filename_component(ABS_CONFIG_DIR "${CMAKE_C_COMPILER}" DIRECTORY ABSOLUTE)\n'\
-        '   message(STATUS "ABS_CONFIG_DIR: ${ABS_CONFIG_DIR}")\n    set(TOOLCHAIN_PREFIX ${ABS_CONFIG_DIR}/arm-none-eabi-)\n    message(STATUS "TOOLCHAIN_PREFIX: ${TOOLCHAIN_PREFIX}")\n'\
-        '   set(CMAKE_CXX_COMPILER ${TOOLCHAIN_PREFIX}g++.exe)\n endif()\n    set(CMAKE_ASM_COMPILER  ${CMAKE_C_COMPILER})\n    set(CMAKE_LINKER        ${CMAKE_CXX_COMPILER})\n'\
-        '   set(CMAKE_OBJCOPY       ${TOOLCHAIN_PREFIX}objcopy.exe)\n    set(CMAKE_SIZE          ${TOOLCHAIN_PREFIX}size.exe)'
+        '   message(STATUS "ABS_CONFIG_DIR: ${ABS_CONFIG_DIR}")\n    set(TOOLCHAIN_PREFIX ${ABS_CONFIG_DIR}/arm-none-eabi-)\n   #set(CMAKE_CXX_COMPILER ${TOOLCHAIN_PREFIX}g++.exe)\n'\
+        'message(STATUS "CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")\nelse()\n  set(CMAKE_C_COMPILER E:/gcc/10_2021.10/bin/arm-none-eabi-gcc.exe)\n'\
+        '  get_filename_component(ABS_CONFIG_DIR "${CMAKE_C_COMPILER}" DIRECTORY ABSOLUTE)\n  set(CMAKE_CXX_COMPILER ${ABS_CONFIG_DIR}/arm-none-eabi-g++.exe)\n  set(TOOLCHAIN_PREFIX ${ABS_CONFIG_DIR}/arm-none-eabi-)'\
+        ' endif()\n    set(CMAKE_ASM_COMPILER  ${CMAKE_C_COMPILER})\n    set(CMAKE_LINKER        ${CMAKE_CXX_COMPILER})\n    set(CMAKE_OBJCOPY       ${TOOLCHAIN_PREFIX}objcopy.exe)\n    set(CMAKE_SIZE          ${TOOLCHAIN_PREFIX}size.exe)'
         #cmake['CMAKE_COMPILER_PATH'] = '# arm-none-eabi- must be part of path environment\n #手动配置启动文件 可以网上找教程 安装GCC编译工具链 并找到安装路径 举例: '\
         ' E:/gcc/10_2021.10/bin/arm-none-eabi- \nset(TOOLCHAIN_PREFIX   )\n '
 
@@ -283,24 +284,31 @@ class CMake (object):
         #配置内核型号
         cmake['CpuType'] =' # MCU specific flags\n set(TARGET_FLAGS "' + core +'")\n'
         #配置配置通用的编译选项 等
-        cmake['CMAKE_C_FLAGS'] = '# 此处是通用的编译选项C语言 自动生成\n set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TARGET_FLAGS} ${CMAKE_C_FLAGS_MANUAL} -mthumb' \
+        cmake['CMAKE_C_FLAGS'] = '# 此处是通用的编译选项C语言 自动生成\n set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TARGET_FLAGS} ${CMAKE_C_FLAGS_MANUAL} --specs=nano.specs --specs=nosys.specs -mthumb' \
         ' -Wall -fdata-sections -ffunction-sections ")'
         cmake['CMAKE_ASM_FLAGS'] = '# 此处是通用的编译选项汇编语言 自动生成\n set(CMAKE_ASM_FLAGS "${TARGET_FLAGS} -x -mthumb assembler-with-cpp -MMD -MP")'
         cmake['CMAKE_CXX_FLAGS']='# 此处是通用的编译选项CXX语言 自动生成\n set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -Wall -fdata-sections -ffunction-sections")\n\n'
-        cmake['CMAKE_C_FLAGS_INIT']='set(CMAKE_C_FLAGS_INIT "--specs=nano.specs --specs=nosys.specs -mfloat-abi=soft -mthumb")\n'
+        cmake['CMAKE_C_FLAGS_INIT']='set(CMAKE_C_FLAGS_INIT " -mfloat-abi=soft -mthumb")\n'
         #配置宏定义
         cmake['defines'] = '#此处是项目使用的宏定义 自动生成\nadd_compile_definitions( \n'
         for define in self.project['defs']:
             cmake['defines']=cmake['defines']+'  '+define+'\n'
         cmake['defines']=cmake['defines'] + ')\n'
-        #配置连接文件output
-        cmake['Link_Flags']='\n set(LINKER_FLAGS "-T${CMAKE_LINKER_FILE} --specs=nano.specs --specs=nosys.specs -mfloat-abi=soft -mthumb")'
+
         #配置成果物路径
         rlaease_path = Path(self.path/"release")
         path_obj = Path(rlaease_path)
         # 转换为字符串时会使用当前系统的分隔符，可以强制转换为POSIX格式
         posix_path = path_obj.as_posix()
         cmake['output'] = '#此处是项目的成果物输出路径 默认默认生成在父目录下/release/project_name中 如果需要修改 请在cmake.py中进行\nSET(OutPut_Path '+str(posix_path)+')\n'
+        cmake['out_put_map']='#此处是项目的map文件 默认默认生成在父目录下/release/project_name中 如果需要修改 请在cmake.py中进行\nSET(CMAKE_MAP_ELIF ${OutPut_Path}/${CMAKE_PROJECT_NAME}.map)\n'         
+        cmake['out_put_buildmap']='#此处是项目的buildmap文件 默认默认生成在父目录下/build/project_name.elf.map中 如果需要修改 请在cmake.py中进行\n'\
+        '#该配置是为了适配 STM32Cude在VSCODE上的显示\nset(BUILD_MAP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/build/${CMAKE_PROJECT_NAME}.elf.map)\n'   
+
+   
+
+        #配置连接文件output
+        cmake['Link_Flags']='\n set(LINKER_FLAGS "-T${CMAKE_LINKER_FILE} -Wl,-Map=${CMAKE_MAP_ELIF} -Wl,--print-memory-usage")'
 
         cmake['incs'] = '#generated include paths \n set(Inc_Pro \n'
         for inc in self.project['incs']:    
